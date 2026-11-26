@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "method": "WECS/DHM 1990",
+  "source": "Civil Works Guidelines for Micro-Hydropower in Nepal, Appendix A, p.146-147",
+  "calibration": {
+    "area_km2": {"min": 4, "max": 54100},
+    "source": "Civil Works Guidelines for Micro-Hydropower in Nepal, Appendix A: span of catchments used to build the WECS/DHM regressions"
+  },
+  "flood": {
+    "source": "Civil Works Guidelines for Micro-Hydropower in Nepal, Appendix A, p.146-147: instantaneous flood peaks",
+    "form": "Q_T = alpha * (x)^beta",
+    "coefficients": {
+      "2": {"alpha": 1.8767, "beta": 0.8783, "x": "A3000+1"},
+      "100": {"alpha": 14.630, "beta": 0.7342, "x": "A3000+1"}
+    }
+  },
+  "fdc": {
+    "source": "Civil Works Guidelines for Micro-Hydropower in Nepal, Appendix A, p.146-147: flow duration curve",
+    "coefficients": {
+      "0": {"form": "log_linear", "c": -3.5346, "a": 0.9398, "x": "A5000+1", "b": 0.3739},
+      "5": {"form": "log_linear", "c": -3.4978, "a": 0.9814, "x": "A5000+1", "b": 0.2670},
+      "20": {"form": "log_linear", "c": -5.4357, "a": 0.9824, "x": "A", "b": 0.4408},
+      "40": {"form": "log_linear", "c": -5.9543, "a": 1.0070, "x": "A", "b": 0.3231},
+      "60": {"form": "log_linear", "c": -6.4846, "a": 1.0004, "x": "A", "b": 0.3016},
+      "80": {"form": "log_linear", "c": -4.8508, "a": 1.0375, "x": "A5000+1", "b": 0},
+      "95": {"form": "log_linear", "c": -5.4716, "a": 1.0776, "x": "A5000+1", "b": 0},
+      "100": {"form": "squared_sqrt", "c": -0.09892, "a": 0.08149, "x": "A5000+1"}
+    }
+  },
+  "monthly": {
+    "source": "Civil Works Guidelines for Micro-Hydropower in Nepal, Appendix A, p.146-147: long-term mean monthly flows",
+    "form": "Q_month = C * A^a1 * (A5000+1)^a2 * MWI^a3",
+    "coefficients": {
+      "Jan": {"c": 0.01423, "a1": 0, "a2": 0.9777, "a3": 0},
+      "Feb": {"c": 0.01219, "a1": 0, "a2": 0.9766, "a3": 0},
+      "Mar": {"c": 0.009988, "a1": 0, "a2": 0.9948, "a3": 0},
+      "Apr": {"c": 0.007974, "a1": 0, "a2": 1.0435, "a3": 0},
+      "May": {"c": 0.008434, "a1": 0, "a2": 1.0898, "a3": 0},
+      "Jun": {"c": 0.006943, "a1": 0.9968, "a2": 0, "a3": 0.2610},
+      "Jul": {"c": 0.02123, "a1": 0, "a2": 1.0093, "a3": 0.2523},
+      "Aug": {"c": 0.02548, "a1": 0, "a2": 0.9963, "a3": 0.2620},
+      "Sep": {"c": 0.01677, "a1": 0, "a2": 0.9894, "a3": 0.2878},
+      "Oct": {"c": 0.009724, "a1": 0, "a2": 0.9880, "a3": 0.2508},
+      "Nov": {"c": 0.001760, "a1": 0.9605, "a2": 0, "a3": 0.3910},
+      "Dec": {"c": 0.001485, "a1": 0.9536, "a2": 0, "a3": 0.3607}
+    }
+  },
+  "verified": {
+    "fdc.80": "reconstructed from worked example",
+    "fdc.100": "reconstructed from worked example"
+  }
+}

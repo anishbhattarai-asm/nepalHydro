@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "method": "MIP 1982",
+  "source": "Civil Works Guidelines for Micro-Hydropower in Nepal, Appendix A, Table A4: non-dimensional regional ordinates (April = 1.00)",
+  "regions": {
+    "1": {"verified": true, "note": "", "ordinates": {"Jan": 2.40, "Feb": 1.80, "Mar": 1.30, "Apr": 1.00, "May": 2.30, "Jun": 6.00, "Jul": 14.50, "Aug": 25.00, "Sep": 16.50, "Oct": 8.00, "Nov": 4.10, "Dec": 3.10}},
+    "2": {"verified": true, "note": "", "ordinates": {"Jan": 2.24, "Feb": 1.70, "Mar": 1.33, "Apr": 1.00, "May": 1.21, "Jun": 7.27, "Jul": 18.18, "Aug": 27.27, "Sep": 20.91, "Oct": 9.09, "Nov": 3.94, "Dec": 3.03}},
+    "3": {"verified": true, "note": "confirmed by the Solu Khola worked example", "ordinates": {"Jan": 2.71, "Feb": 1.88, "Mar": 1.38, "Apr": 1.00, "May": 1.88, "Jun": 3.13, "Jul": 13.54, "Aug": 25.00, "Sep": 20.83, "Oct": 10.42, "Nov": 5.00, "Dec": 3.75}},
+    "4": {"verified": false, "note": "separated from an interleaved scan of the region 3/4 columns; Jul and Oct both read 6.89; confirm against the printed guideline", "ordinates": {"Jan": 2.59, "Feb": 1.88, "Mar": 1.38, "Apr": 1.00, "May": 2.19, "Jun": 3.75, "Jul": 6.89, "Aug": 27.27, "Sep": 20.91, "Oct": 6.89, "Nov": 5.00, "Dec": 3.44}},
+    "5": {"verified": true, "note": "", "ordinates": {"Jan": 2.42, "Feb": 1.82, "Mar": 1.36, "Apr": 1.00, "May": 0.91, "Jun": 2.73, "Jul": 11.21, "Aug": 13.94, "Sep": 10.00, "Oct": 6.52, "Nov": 4.55, "Dec": 3.33}},
+    "6": {"verified": true, "note": "", "ordinates": {"Jan": 2.03, "Feb": 1.62, "Mar": 1.27, "Apr": 1.00, "May": 2.57, "Jun": 6.08, "Jul": 24.32, "Aug": 33.78, "Sep": 27.03, "Oct": 6.08, "Nov": 3.38, "Dec": 2.57}},
+    "7": {"verified": true, "note": "", "ordinates": {"Jan": 3.30, "Feb": 2.20, "Mar": 1.40, "Apr": 1.00, "May": 3.50, "Jun": 6.00, "Jul": 14.00, "Aug": 35.00, "Sep": 24.00, "Oct": 12.00, "Nov": 7.50, "Dec": 5.00}}
+  }
+}
