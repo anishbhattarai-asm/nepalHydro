@@ -67,7 +67,7 @@ show_missing = true
 strict = true
 python_version = "3.10"
 mypy_path = "src"
-files = ["src", "tests", "examples"]
+files = ["src", "tests", "examples", "scripts"]
 
 [[tool.mypy.overrides]]
 module = ["hypothesis.*"]
