@@ -165,7 +165,9 @@ return_periods = st.lists(
 @given(a3000=st.floats(0.0, A_MAX), periods=return_periods)
 def test_flood_strictly_increases_with_return_period(a3000: float, periods: list[float]) -> None:
     periods = sorted(t for t in periods if t > 1)
-    floods = wecs_dhm.flood_peaks(Catchment(area_below_3000_km2=a3000), return_periods=periods)
+    floods = _quietly(  # T > 100 warns that it is extrapolated
+        wecs_dhm.flood_peaks, Catchment(area_below_3000_km2=a3000), return_periods=periods
+    )
     flows = [floods[t].q_m3s for t in periods]
     assert all(b > a for a, b in itertools.pairwise(flows))
 
@@ -173,8 +175,8 @@ def test_flood_strictly_increases_with_return_period(a3000: float, periods: list
 @given(a3000=st.floats(0.0, A_MAX), grow=st.floats(0.0, A_MAX), t=st.floats(1.01, 10000.0))
 def test_flood_never_falls_when_a3000_grows(a3000: float, grow: float, t: float) -> None:
     larger = min(a3000 + grow, A_MAX)
-    small = wecs_dhm.flood_peaks(Catchment(area_below_3000_km2=a3000), return_periods=[t])
-    large = wecs_dhm.flood_peaks(Catchment(area_below_3000_km2=larger), return_periods=[t])
+    small = _quietly(wecs_dhm.flood_peaks, Catchment(area_below_3000_km2=a3000), [t])
+    large = _quietly(wecs_dhm.flood_peaks, Catchment(area_below_3000_km2=larger), [t])
     # ln Q_T = (1 - r) ln Q2 + r ln Q100 with r = S_T / S_100. Its slope in ln(A3000 + 1),
     # 0.8783 - 0.1441 r, is positive for any T in use, so Q_T grows with A3000. For T > 100
     # (r > 1) one term falls while the other rises, so a tiny growth can round one ulp the

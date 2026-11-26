@@ -137,7 +137,8 @@ def test_q100_negative_root_is_zero_with_a_warning() -> None:
 
 
 def test_flood_fit_is_log_normal_through_the_anchors(solu_khola: Catchment) -> None:
-    floods = wecs_dhm.flood_peaks(solu_khola, return_periods=(2, 100, 1000, 2.5))
+    with pytest.warns(HydroWarning, match="extrapolated"):
+        floods = wecs_dhm.flood_peaks(solu_khola, return_periods=(2, 100, 1000, 2.5))
     q2, q100 = floods[2].q_m3s, floods[100].q_m3s
     sigma = math.log(q100 / q2) / standard_normal_variate(100)
     assert floods.sigma_ln == pytest.approx(sigma)
@@ -154,8 +155,9 @@ def test_flood_keeps_requested_order_and_drops_duplicates(solu_khola: Catchment)
 
 @pytest.mark.parametrize(
     ("periods", "error"),
-    [((), ValueError), ((1,), ValueError), ((0.5, 2), ValueError), ("2", TypeError),
-     (100, TypeError)],
+    [((), ValueError), ((1,), ValueError), ((0.5, 2), ValueError), ((0, 2), ValueError),
+     ((-5,), ValueError), ((10_000.5,), ValueError), ((2, 20_000), ValueError),
+     ((float("nan"),), ValueError), ("2", TypeError), (100, TypeError), ((True,), TypeError)],
 )  # fmt: skip
 def test_flood_rejects_bad_return_periods(
     solu_khola: Catchment, periods: object, error: type[Exception]
@@ -217,3 +219,43 @@ def test_docstring_documents_reconstructed_forms() -> None:
     assert "Q80" in doc
     assert "Q100" in doc
     assert "reconstructed from the Solu Khola worked example" in doc
+
+
+# ------------------------------------------------------ return-period limits
+
+
+@pytest.mark.parametrize("t", [1, 0.999, 0, -1])
+def test_return_period_at_or_below_one_is_a_plain_value_error(
+    solu_khola: Catchment, t: float
+) -> None:
+    with pytest.raises(ValueError, match="> 1") as info:
+        wecs_dhm.flood_peaks(solu_khola, return_periods=[t])
+    assert type(info.value) is ValueError  # not statistics.StatisticsError
+
+
+def test_return_period_above_10000_names_the_offenders(solu_khola: Catchment) -> None:
+    with pytest.raises(ValueError, match="at most 10000 years, got 20000, 100000"):
+        wecs_dhm.flood_peaks(solu_khola, return_periods=[100, 20_000, 100_000])
+
+
+def test_return_period_10000_is_allowed_with_a_warning(solu_khola: Catchment) -> None:
+    with pytest.warns(HydroWarning, match="extrapolated beyond the 2/100-yr anchors"):
+        floods = wecs_dhm.flood_peaks(solu_khola, return_periods=[10_000])
+    assert floods[10_000].q_m3s > 0
+
+
+def test_extrapolation_warning_names_every_period_above_100(solu_khola: Catchment) -> None:
+    with pytest.warns(HydroWarning) as record:
+        floods = wecs_dhm.flood_peaks(solu_khola, return_periods=[2, 100, 200, 1000, 150.5])
+    assert len(record) == 1
+    message = str(record[0].message)
+    assert "T = 200, 1000, 150.5 yr extrapolated beyond the 2/100-yr anchors" in message
+    assert floods.warnings == (message,)
+    assert record[0].filename == __file__
+
+
+@pytest.mark.parametrize("periods", [(2, 5, 10, 20, 50, 100), (1.5, 99.9), (100,)])
+def test_periods_up_to_100_are_silent(solu_khola: Catchment, periods: tuple[float, ...]) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert wecs_dhm.flood_peaks(solu_khola, return_periods=periods).warnings == ()

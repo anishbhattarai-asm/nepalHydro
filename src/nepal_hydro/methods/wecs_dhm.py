@@ -24,9 +24,17 @@ from nepal_hydro.coefficients import (
 from nepal_hydro.results import FloodEstimate, FloodPeaks, FlowDurationCurve, MonthlyFlows
 from nepal_hydro.warnings import HydroWarning, emit
 
-__all__ = ["DEFAULT_RETURN_PERIODS", "flood_peaks", "flow_duration", "monthly_flows"]
+__all__ = [
+    "DEFAULT_RETURN_PERIODS",
+    "MAX_RETURN_PERIOD_YR",
+    "flood_peaks",
+    "flow_duration",
+    "monthly_flows",
+]
 
 DEFAULT_RETURN_PERIODS: tuple[int, ...] = (2, 5, 10, 20, 50, 100)
+# A validation limit, not a coefficient: beyond 10 000 years the fit means nothing.
+MAX_RETURN_PERIOD_YR = 10_000
 
 # Formula variables as named in the data files -> (Catchment field, offset).
 _VARIABLES: dict[Variable, tuple[SubArea | FloatField, float]] = {
@@ -73,6 +81,10 @@ def flood_peaks(
     ``ln Q_T = ln Q_lo + (S_T - S_lo) * sigma`` with
     ``sigma = (ln Q_hi - ln Q_lo) / (S_hi - S_lo)`` and ``S_T`` the standard
     normal variate. Needs only ``area_below_3000_km2``.
+
+    Each return period must be a number with 1 < T <= 10 000 years
+    (``ValueError`` otherwise). Periods beyond the upper anchor (T > 100) are
+    computed, but extrapolated, so they emit a ``HydroWarning`` naming them.
     """
     coef = load_wecs_dhm()
     label = f"{coef.method} flood peaks"
@@ -81,6 +93,12 @@ def flood_peaks(
     if not return_periods:
         raise ValueError("return_periods must not be empty")
     s_t = {t: standard_normal_variate(t) for t in return_periods}  # validates each T > 1
+    too_long = [t for t in return_periods if t > MAX_RETURN_PERIOD_YR]
+    if too_long:
+        raise ValueError(
+            f"return periods must be at most {MAX_RETURN_PERIOD_YR} years, got "
+            + ", ".join(f"{t:g}" for t in too_long)
+        )
 
     anchors = [coef.flood[t] for t in sorted(coef.flood)]
     values, warnings = _inputs(catchment, label, (_VARIABLES[a.x][0] for a in anchors))
@@ -91,6 +109,18 @@ def flood_peaks(
     s_hi = standard_normal_variate(hi.return_period_yr)
     sigma_ln = (math.log(q_hi) - math.log(q_lo)) / (s_hi - s_lo)
     anchor_q: dict[float, float] = {lo.return_period_yr: q_lo, hi.return_period_yr: q_hi}
+
+    beyond = [t for t in s_t if t > hi.return_period_yr]
+    if beyond:
+        warnings.append(
+            emit(
+                f"{label}: T = {', '.join(f'{t:g}' for t in beyond)} yr extrapolated beyond the "
+                f"{lo.return_period_yr}/{hi.return_period_yr}-yr anchors of the log-normal fit; "
+                "treat with caution",
+                HydroWarning,
+                stacklevel=2,
+            )
+        )
 
     estimates = {}
     for t, s in s_t.items():
@@ -127,7 +157,11 @@ def flow_duration(catchment: Catchment) -> FlowDurationCurve:
       while the other points use A5000 (so a catchment mostly above 5000 m can
       give Q20 > Q5), and Q80 and Q95 have no MWI term (so a low MWI, below
       about 1000 mm, can give Q80 > Q60). The values are kept as computed and
-      each rising pair is named.
+      each rising pair is named. The low-MWI crossing is most likely a limit
+      of the 1990 regressions in dry basins rather than an error in the
+      reconstructed Q80 form: Q80, Q95 and Q100, like the January to May
+      monthly flows, have no MWI term at all, because dry-season baseflow
+      was fitted on area alone.
     * If Q100's root ``c + a * sqrt(A5000 + 1)`` is negative (A5000 below about
       0.47 km²), Q100 is set to 0.
     """
