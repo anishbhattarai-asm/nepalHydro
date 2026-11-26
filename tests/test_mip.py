@@ -68,16 +68,18 @@ def test_month_must_be_1_to_12(month: int) -> None:
         _hydro(month=month)
 
 
-@pytest.mark.parametrize(("month", "day"), [(2, 29), (2, 30), (4, 31), (1, 0), (1, 32)])
+@pytest.mark.parametrize(("month", "day"), [(2, 30), (2, 0), (4, 31), (1, 0), (1, 32)])
 def test_invalid_date(month: int, day: int) -> None:
     with pytest.raises(ValueError, match="invalid date"):
         _hydro(month=month, day=day)
 
 
-def test_february_is_28_days() -> None:
-    with pytest.raises(ValueError, match="February is taken as 28 days"):
-        _hydro(month=2, day=29)
-    _hydro(month=2, day=28)
+def test_february_29_is_the_last_day_of_february() -> None:
+    # Same position as Feb 28 in the 365-day interpolation.
+    assert ordinate_on(R3, 2, 29) == ordinate_on(R3, 2, 28)
+    assert _hydro(month=2, day=29).by_month == _hydro(month=2, day=28).by_month
+    with pytest.raises(ValueError, match="Feb has 28 days, got day 30"):
+        _hydro(month=2, day=30)
 
 
 @pytest.mark.parametrize("a", [-0.1, float("inf")])

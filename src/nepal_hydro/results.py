@@ -379,22 +379,27 @@ class MonthlyFlows(_Result, Mapping[str, float]):
 
 @dataclass(frozen=True)
 class ComparisonRow:
-    """One row of a WECS vs MIP comparison. ``ratio`` is ``mip / wecs`` (None if wecs is 0)."""
+    """One row of a WECS vs MIP comparison.
+
+    ``ratio_mip_over_wecs`` is ``mip_m3s / wecs_m3s``: above 1 means MIP gives
+    more flow than WECS/DHM. It is None when the WECS flow is 0.
+    """
 
     month: str
     wecs_m3s: float
     mip_m3s: float
-    ratio: float | None
+    ratio_mip_over_wecs: float | None
 
     @classmethod
     def of(cls, month: str, wecs_m3s: float, mip_m3s: float) -> ComparisonRow:
         return cls(month, wecs_m3s, mip_m3s, mip_m3s / wecs_m3s if wecs_m3s > 0 else None)
 
     def __repr__(self) -> str:
-        ratio = "n/a" if self.ratio is None else f"{self.ratio:.2f}"
+        r = self.ratio_mip_over_wecs
+        ratio = "n/a" if r is None else f"{r:.2f}"
         return (
             f"ComparisonRow({self.month}: wecs={self.wecs_m3s:.2f}, "
-            f"mip={self.mip_m3s:.2f} m³/s, ratio={ratio})"
+            f"mip={self.mip_m3s:.2f} m³/s, mip/wecs={ratio})"
         )
 
 
@@ -403,15 +408,17 @@ class MonthlyComparison(_Result, Mapping[str, ComparisonRow]):
     """WECS/DHM and MIP monthly flows side by side: ``comparison["Jul"].ratio``.
 
     A mapping from month name to :class:`ComparisonRow`; :attr:`annual` compares
-    the annual means. ``ratio`` is MIP over WECS. Built by
-    :func:`nepal_hydro.compare_monthly`.
+    the annual means. The ratio is MIP over WECS (``ratio_mip_over_wecs``, also
+    the CSV and dict column name). Built by :func:`nepal_hydro.compare_monthly`.
     """
 
     wecs: MonthlyFlows
     mip: MonthlyFlows
 
     _kind: ClassVar[str] = "MonthlyComparison"
-    _csv_header: ClassVar[tuple[str, ...]] = ("month", "wecs_m3s", "mip_m3s", "ratio")
+    _csv_header: ClassVar[tuple[str, ...]] = (
+        "month", "wecs_m3s", "mip_m3s", "ratio_mip_over_wecs",
+    )  # fmt: skip
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -435,7 +442,7 @@ class MonthlyComparison(_Result, Mapping[str, ComparisonRow]):
 
     def _rows(self) -> list[tuple[Any, ...]]:
         rows = [*self.values(), self.annual]
-        return [(r.month, r.wecs_m3s, r.mip_m3s, r.ratio) for r in rows]
+        return [(r.month, r.wecs_m3s, r.mip_m3s, r.ratio_mip_over_wecs) for r in rows]
 
     def _data(self) -> dict[str, Any]:
         return {
@@ -454,10 +461,11 @@ class MonthlyComparison(_Result, Mapping[str, ComparisonRow]):
 
     def __repr__(self) -> str:
         a = self.annual
-        ratio = "n/a" if a.ratio is None else f"{a.ratio:.2f}"
+        r = a.ratio_mip_over_wecs
+        ratio = "n/a" if r is None else f"{r:.2f}"
         return (
             f"MonthlyComparison(annual mean wecs={a.wecs_m3s:.2f}, mip={a.mip_m3s:.2f} m³/s, "
-            f"ratio={ratio}, {self._repr_tail()})"
+            f"mip/wecs={ratio}, {self._repr_tail()})"
         )
 
 

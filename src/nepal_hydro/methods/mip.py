@@ -25,7 +25,8 @@ from nepal_hydro.warnings import HydroWarning, UnverifiedCoefficientWarning, emi
 
 __all__ = ["MONTH_DAYS", "monthly_hydrograph", "ordinate_on"]
 
-# Calendar facts, not coefficients: a 365-day year (February has 28 days).
+# Calendar facts, not coefficients: a 365-day year (February has 28 days;
+# Feb 29 is accepted and placed where Feb 28 is).
 MONTH_DAYS: tuple[int, ...] = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 _YEAR_DAYS = sum(MONTH_DAYS)
 _MONTH_START: tuple[int, ...] = (0, *accumulate(MONTH_DAYS[:-1]))
@@ -51,11 +52,10 @@ def _day(month: int, day: object) -> int | None:
         raise TypeError(f"day must be an integer or None, got {day!r}")
     number = int(day)
     length = MONTH_DAYS[month - 1]
+    if month == 2 and number == 29:
+        return length  # leap day: the last day of February, same position as Feb 28
     if not 1 <= number <= length:
-        raise ValueError(
-            f"invalid date: {MONTHS[month - 1]} has {length} days, got day {day}"
-            + (" (February is taken as 28 days)" if month == 2 and number == 29 else "")
-        )
+        raise ValueError(f"invalid date: {MONTHS[month - 1]} has {length} days, got day {day}")
     return number
 
 
@@ -78,6 +78,8 @@ def ordinate_on(ordinates: Mapping[str, float], month: int, day: int | None = No
     (the middle of that day, in a 365-day year) is interpolated linearly
     between the two mid-month points either side of it. December and January
     are neighbours, so Dec 31 and Jan 1 both interpolate between them.
+    February 29 is accepted as the last day of February (the same position as
+    February 28).
     """
     m = _month(month)
     d = _day(m, day)

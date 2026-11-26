@@ -179,7 +179,7 @@ monthly["Jul"], monthly.annual_mean          # 43.86, 16.68
 hydro = mip.monthly_hydrograph(c, measured_q_m3s=2.8, month=4, day=None, abstractions_m3s=0.0)
 hydro["Aug"]                 # 70.00
 
-table = compare_monthly(monthly, hydro)      # rows: month, wecs, mip, ratio
+table = compare_monthly(monthly, hydro)      # rows: month, wecs, mip, ratio_mip_over_wecs
 ```
 
 **CLI:**
@@ -213,18 +213,19 @@ Invalid geometry raises an exception. An input that is valid but outside the met
 | `area_below_3000_km2` | float \| None | 0 ≤ A3000 ≤ A5000 | `ValueError` |
 | `monsoon_wetness_index_mm` | float \| None | > 0 | `ValueError` |
 | `mip_region` | int \| None | 1–7 | `ValueError` |
-| any area | — | outside 4–54 100 km² (regression range) | `OutOfCalibrationRangeWarning` |
+| `area_km2` (when set) | — | outside 4–54 100 km² (regression range) | `OutOfCalibrationRangeWarning` |
+| `area_below_5000_km2`, `area_below_3000_km2` (when `area_km2` is not set) | — | above 54 100 km²; small or zero values never warn (A3000 = 0 is valid) | `OutOfCalibrationRangeWarning` |
 | missing field a method needs | — | name the field in the message | `MissingInputError` |
 
 | MIP argument | Rule | On failure |
 | --- | --- | --- |
 | `measured_q_m3s` | > 0 | `ValueError` |
 | `month` | 1–12; Nov–Apr is expected | outside Nov–Apr → `HydroWarning` |
-| `day` | optional; if set, interpolate linearly between the mid-month ordinates of adjacent months | invalid date → `ValueError` |
+| `day` | optional; if set, interpolate linearly between the mid-month ordinates of adjacent months (365-day year, wrapping Dec ↔ Jan); Feb 29 is treated as Feb 28 | invalid date → `ValueError` |
 | `abstractions_m3s` | ≥ 0, added to the measurement | `ValueError` |
 | region 4 | not yet confirmed | `UnverifiedCoefficientWarning` |
 
-The 4–54 100 km² range is the span of catchments used to build the WECS/DHM regressions, per the [guideline](https://samplecontents.library.ph/en-practical_action/Energy/Hydro%20power/civil_works_guidelines_for_micro_hydro/page13.html). The guideline gives no MWI range, so v0.1 checks only that MWI is positive.
+The 4–54 100 km² range is the span of total basin areas used to build the WECS/DHM regressions, per the [guideline](https://samplecontents.library.ph/en-practical_action/Energy/Hydro%20power/civil_works_guidelines_for_micro_hydro/page13.html), so it is checked against A. Sub-areas are checked, against the upper end only, when A is not given. The guideline gives no MWI range, so v0.1 checks only that MWI is positive.
 
 **Result types (frozen dataclasses):**
 

@@ -37,7 +37,7 @@ def test_rows_are_month_wecs_mip_ratio(table: MonthlyComparison) -> None:
     assert jul.month == "Jul"
     assert jul.wecs_m3s == table.wecs["Jul"]
     assert jul.mip_m3s == table.mip["Jul"]
-    assert jul.ratio == pytest.approx(jul.mip_m3s / jul.wecs_m3s)
+    assert jul.ratio_mip_over_wecs == pytest.approx(jul.mip_m3s / jul.wecs_m3s)
 
 
 def test_annual_row(table: MonthlyComparison) -> None:
@@ -71,10 +71,10 @@ def test_zero_wecs_flow_gives_no_ratio() -> None:
     zero = MonthlyFlows(by_month=dict.fromkeys(MONTHS, 0.0), method="a", source="s")
     one = MonthlyFlows(by_month=dict.fromkeys(MONTHS, 1.0), method="b", source="s")
     table = compare_monthly(zero, one)
-    assert table["Jan"].ratio is None
-    assert table.annual.ratio is None
-    assert "ratio=n/a" in repr(table)
-    assert "ratio=n/a" in repr(table["Jan"])
+    assert table["Jan"].ratio_mip_over_wecs is None
+    assert table.annual.ratio_mip_over_wecs is None
+    assert "mip/wecs=n/a" in repr(table)
+    assert "mip/wecs=n/a" in repr(table["Jan"])
 
 
 @pytest.mark.parametrize("bad", [{"Jan": 1.0}, None, "flows"])
@@ -91,14 +91,15 @@ def test_exports(table: MonthlyComparison) -> None:
     csv_text = table.to_csv(decimals=2)
     assert csv_text is not None
     lines = csv_text.splitlines()
-    assert lines[0] == "month,wecs_m3s,mip_m3s,ratio"
+    assert lines[0] == "month,wecs_m3s,mip_m3s,ratio_mip_over_wecs"
     assert lines[7] == "Jul,43.86,37.91,0.86"
     assert lines[-1].startswith("annual,16.68,21.12,")
     assert len(lines) == 14
     data = json.loads(table.to_json())
     assert data["rows"][6] == {
         "month": "Jul", "wecs_m3s": table["Jul"].wecs_m3s,
-        "mip_m3s": table["Jul"].mip_m3s, "ratio": table["Jul"].ratio,
+        "mip_m3s": table["Jul"].mip_m3s,
+        "ratio_mip_over_wecs": table["Jul"].ratio_mip_over_wecs,
     }  # fmt: skip
     assert result_from_dict(data) == table
     assert MonthlyComparison.from_dict(table.to_dict()) == table
@@ -106,4 +107,10 @@ def test_exports(table: MonthlyComparison) -> None:
 
 def test_repr(table: MonthlyComparison) -> None:
     assert repr(table).startswith("MonthlyComparison(annual mean wecs=16.68, mip=21.12 m³/s")
-    assert repr(table["Jul"]) == "ComparisonRow(Jul: wecs=43.86, mip=37.91 m³/s, ratio=0.86)"
+    assert repr(table["Jul"]) == "ComparisonRow(Jul: wecs=43.86, mip=37.91 m³/s, mip/wecs=0.86)"
+
+
+def test_ratio_direction_is_documented() -> None:
+    assert "mip_m3s / wecs_m3s" in (ComparisonRow.__doc__ or "")
+    assert "MIP divided by WECS" in (compare_monthly.__doc__ or "")
+    assert "ratio_mip_over_wecs" in (MonthlyComparison.__doc__ or "")

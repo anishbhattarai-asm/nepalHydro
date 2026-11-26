@@ -8,7 +8,9 @@ __all__ = ["compare_monthly"]
 
 
 def compare_monthly(wecs: MonthlyFlows, mip: MonthlyFlows) -> MonthlyComparison:
-    """Rows of month, WECS flow, MIP flow and ratio (MIP / WECS), plus the annual means.
+    """Rows of month, WECS flow, MIP flow and ``ratio_mip_over_wecs``, plus the annual means.
+
+    The ratio is MIP divided by WECS/DHM, so above 1 means MIP gives more flow.
 
     The comparison carries both results' warnings, and both sources.
     """
