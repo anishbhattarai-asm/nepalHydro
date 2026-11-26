@@ -126,6 +126,9 @@ nepal-hydro all     --area 330 --a5000 308.5 --a3000 97.7 --mwi 1500 --region 3 
   or cp437.
 - Exit codes: `0` success, `1` invalid or missing input (a one-line message), `2` usage
   error.
+- Windows PowerShell 5.1 (not PowerShell 7) adds a UTF-8 byte-order mark when it pipes
+  text into another program, so a reader of piped JSON should decode with `utf-8-sig`:
+  `json.loads(sys.stdin.buffer.read().decode("utf-8-sig"))`.
 
 ## Methods
 

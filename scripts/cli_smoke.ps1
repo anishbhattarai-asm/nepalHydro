@@ -29,15 +29,13 @@ foreach ($v in @('426.06', '98.45', '2.03', '43.86', '16.68', '70.00', '21.12', 
 Write-Host $table
 
 # 2. JSON piped into Python, rebuilt with result_from_dict
-$py = 'import json,sys; from nepal_hydro import result_from_dict as r; d=json.load(sys.stdin); print(sorted(type(r(v)).__name__ for v in d.values()))'
-#    Windows PowerShell 5.1 re-encodes text piped between two programs using
-#    $OutputEncoding. Show what Python receives with the session's default...
-Write-Host "OutputEncoding: $($OutputEncoding.WebName) (codepage $($OutputEncoding.CodePage))"
-$peek = 'import sys; print(repr(sys.stdin.buffer.read()[:24]))'
+#    Windows PowerShell 5.1 puts a UTF-8 BOM in front of text it pipes into another
+#    program (seen in CI: b'\xef\xbb\xbf{...', whatever $OutputEncoding says), so the
+#    reader decodes with utf-8-sig, which drops a BOM if present. pwsh 7 adds none.
+$py = 'import json,sys; from nepal_hydro import result_from_dict as r; d=json.loads(sys.stdin.buffer.read().decode(''utf-8-sig'')); print(sorted(type(r(v)).__name__ for v in d.values()))'
+$peek = 'import sys; print(repr(sys.stdin.buffer.read()[:8]))'
 $raw = nepal-hydro all @solu --format json 2>$null | python -c $peek | Out-String
-Write-Host "bytes Python receives by default: $($raw.Trim())"
-#    ...then pipe with BOM-less UTF-8, the documented fix for 5.1 (a no-op change in pwsh 7).
-$OutputEncoding = New-Object System.Text.UTF8Encoding $false
+Write-Host "first bytes Python receives through the pipe: $($raw.Trim())"
 $types = nepal-hydro all @solu --format json 2>$null | python -c $py | Out-String
 Check ($LASTEXITCODE -eq 0) 'json pipe: python exit code 0'
 Check ($types.Trim() -eq "['FloodPeaks', 'FlowDurationCurve', 'MonthlyComparison', 'MonthlyFlows', 'MonthlyFlows']") "json pipe: five results rebuilt ($($types.Trim()))"
