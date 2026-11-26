@@ -153,12 +153,13 @@ class Catchment:
             out = [] if low <= self.area_km2 <= high else [("area_km2", self.area_km2)]
         else:
             out = [(n, v) for n in sub_areas if (v := getattr(self, n)) is not None and v > high]
-        return [
-            emit(
+        # A plain loop, not a comprehension: before Python 3.12 a comprehension is
+        # its own frame, which would shift the warning's stacklevel by one.
+        messages = []
+        for name, value in out:
+            message = (
                 f"{method}: {name} = {value:g} km² is outside {range_text}; "
-                "treat the result with caution",
-                OutOfCalibrationRangeWarning,
-                stacklevel=stacklevel + 1,
+                "treat the result with caution"
             )
-            for name, value in out
-        ]
+            messages.append(emit(message, OutOfCalibrationRangeWarning, stacklevel=stacklevel + 1))
+        return messages
