@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import pytest
+from hypothesis import settings
 
 from nepal_hydro import Catchment
+
+# `pytest --hypothesis-profile=thorough` searches far harder than the default 100 examples.
+settings.register_profile("thorough", max_examples=20_000, deadline=None)
 
 
 @pytest.fixture

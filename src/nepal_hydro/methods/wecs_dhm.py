@@ -123,10 +123,11 @@ def flow_duration(catchment: Catchment) -> FlowDurationCurve:
 
     Warnings (``HydroWarning``, also recorded on the result):
 
-    * Q20, Q40 and Q60 use total area A while the other points use A5000, so a
-      catchment mostly above 5000 m can give a curve that rises with
-      exceedance. The values are kept as computed and the out-of-order points
-      are named.
+    * The curve can rise with exceedance: Q20, Q40 and Q60 use total area A
+      while the other points use A5000 (so a catchment mostly above 5000 m can
+      give Q20 > Q5), and Q80 and Q95 have no MWI term (so a low MWI, below
+      about 1000 mm, can give Q80 > Q60). The values are kept as computed and
+      each rising pair is named.
     * If Q100's root ``c + a * sqrt(A5000 + 1)`` is negative (A5000 below about
       0.47 km²), Q100 is set to 0.
     """
@@ -171,9 +172,10 @@ def flow_duration(catchment: Catchment) -> FlowDurationCurve:
     if rises:
         warnings.append(
             emit(
-                f"{label}: the curve is not monotonic ({'; '.join(rises)}); Q20-Q60 use total "
-                "area A and the other points A5000, so a catchment mostly above 5000 m can "
-                "give this. Values are kept as computed",
+                f"{label}: the curve is not monotonic ({'; '.join(rises)}). Q20-Q60 use total "
+                "area A and the other points A5000, and Q80/Q95 have no MWI term, so a "
+                "catchment mostly above 5000 m or with a low MWI can give this. Values are "
+                "kept as computed",
                 HydroWarning,
                 stacklevel=2,
             )
