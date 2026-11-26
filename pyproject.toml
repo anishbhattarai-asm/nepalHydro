@@ -48,6 +48,7 @@ packages = ["src/nepal_hydro"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+filterwarnings = ["error"]
 
 [tool.coverage.run]
 source = ["nepal_hydro"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import math
 import warnings
 
@@ -118,11 +119,16 @@ def test_q100_negative_root_is_zero_with_a_warning() -> None:
     x_zero = (q100.c / q100.a) ** 2
     assert x_zero > 1  # so a tiny A5000 really does go negative
     c = Catchment(area_km2=10, area_below_5000_km2=0, monsoon_wetness_index_mm=1500)
-    with pytest.warns(HydroWarning, match="negative root") as record:
+    with warnings.catch_warnings(record=True) as record:
+        warnings.simplefilter("always")
         fdc = wecs_dhm.flow_duration(c)
     assert fdc.points[100] == 0.0
+    # This catchment is also all above 5000 m, so its curve is non-monotonic too.
+    assert [w.category for w in record] == [HydroWarning, HydroWarning]
+    assert "negative root" in str(record[0].message)
+    assert "not monotonic" in str(record[1].message)
     assert fdc.warnings == tuple(str(w.message) for w in record)
-    assert record[0].filename == __file__
+    assert all(w.filename == __file__ for w in record)
     # Between Q95 and a zero Q100 the curve falls back to linear interpolation.
     assert fdc.at(97.5) == pytest.approx(fdc.points[95] / 2)
 
@@ -171,3 +177,43 @@ def test_no_rounding_inside_results(solu_khola: Catchment) -> None:
     floods = wecs_dhm.flood_peaks(solu_khola)
     for value in (*fdc.points.values(), *monthly.to_list(), floods[100].q_m3s):
         assert value != round(value, 2)
+
+
+# -------------------------------------------------------------- monotonicity
+
+
+def test_non_monotonic_curve_warns_and_keeps_values() -> None:
+    # Mostly above 5000 m: Q20-Q60 use A = 330, the rest A5000 = 50.
+    c = Catchment(area_km2=330, area_below_5000_km2=50, monsoon_wetness_index_mm=1500)
+    with pytest.warns(HydroWarning, match="not monotonic") as record:
+        fdc = wecs_dhm.flow_duration(c)
+    assert len(record) == 1
+    message = str(record[0].message)
+    assert fdc.warnings == (message,)
+    assert record[0].filename == __file__
+    assert fdc.points[20] > fdc.points[5]
+    assert "Q20 = 32.62 > Q5 = 10.11" in message
+    # Exactly the rising pairs are named; Q20 -> Q40 falls, so Q40 is not.
+    rising = [
+        (lo, hi) for lo, hi in itertools.pairwise(fdc.points) if fdc.points[hi] > fdc.points[lo]
+    ]
+    assert rising == [(5, 20)]
+    assert "Q40 = " not in message
+    # Values are unchanged: same formula as for Solu Khola's Q20.
+    e = COEF.fdc[20]
+    assert fdc.points[20] == pytest.approx(
+        math.exp(e.c + e.a * math.log(330) + e.b * math.log(1500))  # type: ignore[union-attr]
+    )
+
+
+def test_monotonic_curve_is_silent(solu_khola: Catchment) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        assert wecs_dhm.flow_duration(solu_khola).warnings == ()
+
+
+def test_docstring_documents_reconstructed_forms() -> None:
+    doc = wecs_dhm.flow_duration.__doc__ or ""
+    assert "Q80" in doc
+    assert "Q100" in doc
+    assert "reconstructed from the Solu Khola worked example" in doc

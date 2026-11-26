@@ -8,6 +8,7 @@ data) and raises :class:`~nepal_hydro.MissingInputError` for the rest.
 
 from __future__ import annotations
 
+import itertools
 import math
 from collections.abc import Iterable, Sequence
 
@@ -113,6 +114,21 @@ def flow_duration(catchment: Catchment) -> FlowDurationCurve:
     Needs ``area_km2``, ``area_below_5000_km2`` and ``monsoon_wetness_index_mm``
     (the fields the curve's formulas use). Use :meth:`FlowDurationCurve.at`
     for exceedances between those points.
+
+    Unverified forms: the scanned guideline garbles the Q80 and Q100 lines, so
+    their forms here are reconstructed from the Solu Khola worked example (the
+    only forms that reproduce Q80 = 3.00 and Q100 = 1.78): Q80 has no MWI term,
+    and Q100 is ``(c + a * sqrt(A5000 + 1)) ** 2``. They are not warned about on
+    each call; :func:`nepal_hydro.coefficients.unverified` lists them with notes.
+
+    Warnings (``HydroWarning``, also recorded on the result):
+
+    * Q20, Q40 and Q60 use total area A while the other points use A5000, so a
+      catchment mostly above 5000 m can give a curve that rises with
+      exceedance. The values are kept as computed and the out-of-order points
+      are named.
+    * If Q100's root ``c + a * sqrt(A5000 + 1)`` is negative (A5000 below about
+      0.47 km²), Q100 is set to 0.
     """
     coef = load_wecs_dhm()
     label = f"{coef.method} flow duration"
@@ -146,6 +162,22 @@ def flow_duration(catchment: Catchment) -> FlowDurationCurve:
                 )
                 root = 0.0
             points[p] = root**2
+
+    rises = [
+        f"Q{p_hi} = {q_hi:.4g} > Q{p_lo} = {q_lo:.4g}"
+        for (p_lo, q_lo), (p_hi, q_hi) in itertools.pairwise(points.items())
+        if q_hi > q_lo
+    ]
+    if rises:
+        warnings.append(
+            emit(
+                f"{label}: the curve is not monotonic ({'; '.join(rises)}); Q20-Q60 use total "
+                "area A and the other points A5000, so a catchment mostly above 5000 m can "
+                "give this. Values are kept as computed",
+                HydroWarning,
+                stacklevel=2,
+            )
+        )
     return FlowDurationCurve(
         points=points, method=coef.method, source=coef.fdc_source, warnings=tuple(warnings)
     )
@@ -179,5 +211,5 @@ def monthly_flows(catchment: Catchment) -> MonthlyFlows:
             q *= values[_MWI] ** r.a3
         flows[r.month] = q
     return MonthlyFlows(
-        values=flows, method=coef.method, source=coef.monthly_source, warnings=tuple(warnings)
+        by_month=flows, method=coef.method, source=coef.monthly_source, warnings=tuple(warnings)
     )

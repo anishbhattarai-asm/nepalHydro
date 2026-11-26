@@ -27,11 +27,13 @@ __all__ = [
     "MipCoefficients",
     "MipRegion",
     "MonthlyCoefficient",
+    "UnverifiedCoefficient",
     "WecsDhmCoefficients",
     "load_mip",
     "load_wecs_dhm",
     "parse_mip",
     "parse_wecs_dhm",
+    "unverified",
 ]
 
 SCHEMA_VERSION = 1
@@ -363,3 +365,31 @@ def load_wecs_dhm() -> WecsDhmCoefficients:
 def load_mip() -> MipCoefficients:
     """The MIP (1982) regional ordinates, loaded and validated once."""
     return parse_mip(_read_json(MIP_FILE))
+
+
+@dataclass(frozen=True)
+class UnverifiedCoefficient:
+    """A coefficient (or formula form) not yet confirmed against a clean guideline copy."""
+
+    method: str
+    item: str
+    note: str
+
+
+def unverified() -> tuple[UnverifiedCoefficient, ...]:
+    """Every flagged coefficient in the data files, with its note.
+
+    WECS/DHM items come from the ``verified`` section of its data file (keys
+    like ``fdc.80``); MIP items are regions whose ``verified`` flag is false
+    (``region.4``).
+    """
+    wecs = load_wecs_dhm()
+    mip = load_mip()
+    return (
+        *(UnverifiedCoefficient(wecs.method, item, note) for item, note in wecs.verified.items()),
+        *(
+            UnverifiedCoefficient(mip.method, f"region.{n}", r.note)
+            for n, r in mip.regions.items()
+            if not r.verified
+        ),
+    )

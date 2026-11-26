@@ -311,69 +311,58 @@ class FlowDurationCurve(_Result):
 
 
 @dataclass(frozen=True, kw_only=True, repr=False)
-class MonthlyFlows(_Result):
-    """Mean flow for each month, ``"Jan"`` to ``"Dec"``, in m³/s: ``flows["Jul"]``.
+class MonthlyFlows(_Result, Mapping[str, float]):
+    """Mean flow for each month in m³/s, as a mapping ``"Jan"`` .. ``"Dec"``: ``flows["Jul"]``.
 
-    Used by both WECS/DHM and MIP; ``method`` says which. It reads like a
-    mapping (``[]``, ``in``, iteration, ``keys()``, ``items()``) but is not a
-    ``Mapping``: the spec names its data field ``values``, which would hide
-    ``Mapping.values()``. Use ``flows.values`` or :meth:`to_list` for the flows.
+    Used by both WECS/DHM and MIP; ``method`` says which. Being a ``Mapping``,
+    ``dict(flows)`` and ``pandas.Series(flows)`` work directly.
     """
 
-    values: Mapping[str, float]
+    by_month: Mapping[str, float]
 
     _kind: ClassVar[str] = "MonthlyFlows"
     _csv_header: ClassVar[tuple[str, str]] = ("month", "q_m3s")
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if set(self.values) != set(MONTHS):
+        if set(self.by_month) != set(MONTHS):
             raise ValueError(f"MonthlyFlows needs exactly the months {', '.join(MONTHS)}")
         object.__setattr__(
             self,
-            "values",
-            MappingProxyType({m: _flow(m, self.values[m]) for m in MONTHS}),
+            "by_month",
+            MappingProxyType({m: _flow(m, self.by_month[m]) for m in MONTHS}),
         )
 
     def __getitem__(self, month: str) -> float:
-        return self.values[month]
+        return self.by_month[month]
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self.values)
+        return iter(self.by_month)
 
     def __len__(self) -> int:
-        return len(self.values)
-
-    def __contains__(self, month: object) -> bool:
-        return month in self.values
-
-    def keys(self) -> Iterable[str]:
-        return self.values.keys()
-
-    def items(self) -> Iterable[tuple[str, float]]:
-        return self.values.items()
+        return len(self.by_month)
 
     @property
     def annual_mean(self) -> float:
         """Arithmetic mean of the 12 monthly flows, in m³/s."""
-        return math.fsum(self.values.values()) / len(MONTHS)
+        return math.fsum(self.by_month.values()) / len(MONTHS)
 
     def to_list(self) -> list[float]:
         """The 12 flows, January first."""
-        return list(self.values.values())
+        return list(self.by_month.values())
 
     def _rows(self) -> list[tuple[Any, float]]:
-        return list(self.values.items())
+        return list(self.by_month.items())
 
     def _data(self) -> dict[str, Any]:
-        return {"values": dict(self.values), "annual_mean": self.annual_mean}
+        return {"by_month": dict(self.by_month), "annual_mean": self.annual_mean}
 
     @classmethod
     def _from_data(cls, data: Mapping[str, Any], meta: dict[str, Any]) -> MonthlyFlows:
-        return cls(values=data["values"], **meta)
+        return cls(by_month=data["by_month"], **meta)
 
     def __repr__(self) -> str:
-        vals = ", ".join(f"{m}={q:.2f}" for m, q in self.values.items())
+        vals = ", ".join(f"{m}={q:.2f}" for m, q in self.by_month.items())
         return f"MonthlyFlows({vals}, mean={self.annual_mean:.2f} m³/s, {self._repr_tail()})"
 
 

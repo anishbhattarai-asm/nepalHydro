@@ -8,6 +8,7 @@ import json
 import math
 import sys
 import types
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -102,7 +103,7 @@ def test_results_are_frozen(solu_khola: Catchment) -> None:
         fdc.points[5] = 1.0  # type: ignore[index]
     monthly = wecs_dhm.monthly_flows(solu_khola)
     with pytest.raises(TypeError):
-        monthly.values["Jan"] = 1.0  # type: ignore[index]
+        monthly.by_month["Jan"] = 1.0  # type: ignore[index]
 
 
 def test_warnings_become_a_tuple() -> None:
@@ -121,23 +122,31 @@ def test_metadata_is_validated(meta: dict[str, Any], error: type[Exception]) -> 
 
 def test_monthly_needs_all_twelve_months() -> None:
     with pytest.raises(ValueError, match="exactly the months"):
-        MonthlyFlows(values={"Jan": 1.0}, **META)
+        MonthlyFlows(by_month={"Jan": 1.0}, **META)
 
 
-def test_monthly_reads_like_a_mapping(solu_khola: Catchment) -> None:
+def test_monthly_is_a_full_mapping(solu_khola: Catchment) -> None:
     monthly = wecs_dhm.monthly_flows(solu_khola)
+    assert isinstance(monthly, Mapping)
     assert list(monthly) == list(MONTHS) == list(monthly.keys())
     assert len(monthly) == 12
     assert "Jul" in monthly
     assert "July" not in monthly
-    assert dict(monthly.items()) == dict(monthly.values)
-    assert monthly.to_list() == [monthly[m] for m in MONTHS]
+    assert monthly.get("July") is None
+    assert dict(monthly) == dict(monthly.by_month) == dict(monthly.items())
+    assert list(monthly.values()) == monthly.to_list() == [monthly[m] for m in MONTHS]
     assert monthly.annual_mean == pytest.approx(sum(monthly.to_list()) / 12)
+
+
+def test_monthly_to_pandas_series(solu_khola: Catchment) -> None:
+    pd = pytest.importorskip("pandas")
+    series = pd.Series(wecs_dhm.monthly_flows(solu_khola))
+    assert list(series.index) == list(MONTHS)
 
 
 def test_monthly_orders_months_whatever_the_input_order() -> None:
     values = {m: float(i) for i, m in enumerate(reversed(MONTHS))}
-    assert list(MonthlyFlows(values=values, **META)) == list(MONTHS)
+    assert list(MonthlyFlows(by_month=values, **META)) == list(MONTHS)
 
 
 def test_flood_peaks_is_a_mapping(solu_khola: Catchment) -> None:
@@ -216,9 +225,9 @@ def test_round_trip_keeps_warnings() -> None:
 def test_json_rounds_only_when_asked(solu_khola: Catchment) -> None:
     monthly = wecs_dhm.monthly_flows(solu_khola)
     full = json.loads(monthly.to_json())
-    assert full["values"]["Jul"] == monthly["Jul"]
+    assert full["by_month"]["Jul"] == monthly["Jul"]
     short = json.loads(monthly.to_json(decimals=2, indent=None))
-    assert short["values"]["Jul"] == 43.86
+    assert short["by_month"]["Jul"] == 43.86
     assert short["annual_mean"] == 16.68
     assert short["method"] == "WECS/DHM 1990"
 

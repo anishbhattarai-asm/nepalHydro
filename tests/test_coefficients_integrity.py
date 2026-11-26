@@ -286,3 +286,23 @@ def test_read_json_reports_missing_and_invalid_files(
         co._read_json("absent.json")
     with pytest.raises(CoefficientDataError, match="invalid JSON"):
         co._read_json("broken.json")
+
+
+def test_unverified_lists_every_flagged_coefficient() -> None:
+    items = {(u.method, u.item): u.note for u in co.unverified()}
+    assert set(items) == {
+        ("WECS/DHM 1990", "fdc.80"),
+        ("WECS/DHM 1990", "fdc.100"),
+        ("MIP 1982", "region.4"),
+    }
+    assert items[("WECS/DHM 1990", "fdc.80")] == "reconstructed from worked example"
+    assert "6.89" in items[("MIP 1982", "region.4")]
+    assert all(note.strip() for note in items.values())
+
+
+def test_readme_documents_the_unverified_items() -> None:
+    readme = (SPEC.parents[1] / "README.md").read_text(encoding="utf-8")
+    assert "Q80 and Q100" in readme
+    assert "reconstructed" in readme
+    assert "region 4" in readme
+    assert "unverified()" in readme

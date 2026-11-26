@@ -230,7 +230,7 @@ The 4–54 100 km² range is the span of catchments used to build the WECS/DHM r
 
 - `FloodEstimate(return_period_yr, q_m3s)` and `FloodPeaks` (a mapping from T to estimate, plus `sigma_ln`, method, source, warnings)
 - `FlowDurationCurve(points: dict[int, float])` with `.at(p)`. Between table points, interpolate in log-flow; never extrapolate past 0 or 100.
-- `MonthlyFlows(values: dict[str, float])` with month-name keys "Jan"–"Dec", `.annual_mean`, `.to_list()`. Both WECS and MIP results use it, each with its own `method` field.
+- `MonthlyFlows(by_month: dict[str, float])`, a `Mapping` with month-name keys "Jan"–"Dec" (so `dict(flows)` and `pd.Series(flows)` work), plus `.annual_mean` and `.to_list()`. Both WECS and MIP results use it, each with its own `method` field.
 - Every result has `to_dict()`, `to_json()` and `to_csv(path_or_buffer)`, plus `to_dataframe()` if pandas happens to be installed.
 
 **Coefficient JSON shape:**
