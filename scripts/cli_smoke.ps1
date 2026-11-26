@@ -30,6 +30,14 @@ Write-Host $table
 
 # 2. JSON piped into Python, rebuilt with result_from_dict
 $py = 'import json,sys; from nepal_hydro import result_from_dict as r; d=json.load(sys.stdin); print(sorted(type(r(v)).__name__ for v in d.values()))'
+#    Windows PowerShell 5.1 re-encodes text piped between two programs using
+#    $OutputEncoding. Show what Python receives with the session's default...
+Write-Host "OutputEncoding: $($OutputEncoding.WebName) (codepage $($OutputEncoding.CodePage))"
+$peek = 'import sys; print(repr(sys.stdin.buffer.read()[:24]))'
+$raw = nepal-hydro all @solu --format json 2>$null | python -c $peek | Out-String
+Write-Host "bytes Python receives by default: $($raw.Trim())"
+#    ...then pipe with BOM-less UTF-8, the documented fix for 5.1 (a no-op change in pwsh 7).
+$OutputEncoding = New-Object System.Text.UTF8Encoding $false
 $types = nepal-hydro all @solu --format json 2>$null | python -c $py | Out-String
 Check ($LASTEXITCODE -eq 0) 'json pipe: python exit code 0'
 Check ($types.Trim() -eq "['FloodPeaks', 'FlowDurationCurve', 'MonthlyComparison', 'MonthlyFlows', 'MonthlyFlows']") "json pipe: five results rebuilt ($($types.Trim()))"
