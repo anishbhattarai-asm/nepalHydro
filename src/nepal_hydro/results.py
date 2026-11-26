@@ -23,6 +23,7 @@ from typing import IO, Any, ClassVar, TypeVar
 from nepal_hydro.coefficients import MONTHS
 
 __all__ = [
+    "AnyResult",
     "ComparisonRow",
     "FloodEstimate",
     "FloodPeaks",
