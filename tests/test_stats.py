@@ -29,6 +29,11 @@ def test_accepts_non_integer_periods() -> None:
     assert standard_normal_variate(2.5) > 0
 
 
+def test_accepts_numpy_scalars() -> None:
+    np = pytest.importorskip("numpy")
+    assert standard_normal_variate(np.int64(100)) == standard_normal_variate(100)
+
+
 @pytest.mark.parametrize("t", [1, 0.5, 0, -10, math.inf, math.nan])
 def test_rejects_periods_that_are_not_above_one(t: float) -> None:
     with pytest.raises(ValueError, match="> 1"):

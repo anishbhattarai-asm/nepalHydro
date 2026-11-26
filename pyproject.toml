@@ -27,7 +27,14 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pytest-cov>=4", "hypothesis>=6", "ruff>=0.4", "mypy>=1.8"]
+dev = [
+    "pytest>=7",
+    "pytest-cov>=4",
+    "hypothesis>=6",
+    "ruff>=0.4",
+    "mypy>=1.8",
+    "numpy",  # tests only: numpy scalars as inputs
+]
 
 [project.scripts]
 nepal-hydro = "nepal_hydro.cli:main"
