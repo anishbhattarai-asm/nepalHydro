@@ -26,6 +26,11 @@ classifiers = [
 ]
 dependencies = []
 
+[project.urls]
+Homepage = "https://github.com/anishbhattarai-asm/nepalHydro"
+Documentation = "https://github.com/anishbhattarai-asm/nepalHydro/blob/main/docs/methods.md"
+Issues = "https://github.com/anishbhattarai-asm/nepalHydro/issues"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7",
