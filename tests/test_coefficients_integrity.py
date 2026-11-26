@@ -29,7 +29,9 @@ SPEC = Path(__file__).resolve().parents[1] / "docs" / "ARCHITECTURE.md"
 
 
 def _raw(name: str) -> dict[str, Any]:
-    text = resources.files("nepal_hydro").joinpath("data", name).read_text(encoding="utf-8")
+    text = (
+        resources.files("nepal_hydro").joinpath("data").joinpath(name).read_text(encoding="utf-8")
+    )
     data: dict[str, Any] = json.loads(text)
     return data
 

@@ -339,7 +339,12 @@ def parse_mip(raw: Any, where: str = MIP_FILE) -> MipCoefficients:
 
 def _read_json(name: str) -> Any:
     try:
-        text = resources.files("nepal_hydro").joinpath("data", name).read_text(encoding="utf-8")
+        text = (
+            resources.files("nepal_hydro")
+            .joinpath("data")
+            .joinpath(name)
+            .read_text(encoding="utf-8")
+        )
     except FileNotFoundError:
         raise CoefficientDataError(f"{name}: data file not found in the package") from None
     try:
