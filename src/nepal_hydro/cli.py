@@ -15,7 +15,7 @@ import argparse
 import json
 import sys
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, TextIO
 
 from nepal_hydro import __version__
@@ -148,36 +148,69 @@ def _periods(args: argparse.Namespace) -> list[float]:
     return [int(t) if t.is_integer() else t for t in periods]
 
 
+class _MissingFlagsError(Exception):
+    """A method cannot run because these CLI flags were not given."""
+
+    def __init__(self, command: str, flags: Sequence[str]) -> None:
+        self.command = command
+        self.flags = tuple(flags)
+        super().__init__(f"{command} needs {', '.join(self.flags)}")
+
+
 def _mip(c: Catchment, args: argparse.Namespace) -> MonthlyFlows:
-    if args.q is None or args.month is None:
-        missing = [flag for flag, v in (("--q", args.q), ("--month", args.month)) if v is None]
-        raise ValueError(f"the MIP hydrograph needs {' and '.join(missing)}")
+    given = {"--region": args.region, "--q": args.q, "--month": args.month}
+    missing = [flag for flag, value in given.items() if value is None]
+    if missing:
+        raise _MissingFlagsError("mip", missing)
     return mip.monthly_hydrograph(
         c, measured_q_m3s=args.q, month=args.month, day=args.day,
         abstractions_m3s=args.abstractions,
     )  # fmt: skip
 
 
-def _run(args: argparse.Namespace) -> dict[str, AnyResult]:
-    """The results for the command, by section name."""
+# command name -> (section name, runner)
+_Runner = Callable[[Catchment, argparse.Namespace], AnyResult]
+_METHODS: dict[str, tuple[str, _Runner]] = {
+    "flood": ("flood_peaks", lambda c, a: wecs_dhm.flood_peaks(c, _periods(a))),
+    "fdc": ("flow_duration", lambda c, a: wecs_dhm.flow_duration(c)),
+    "monthly": ("wecs_monthly", lambda c, a: wecs_dhm.monthly_flows(c)),
+    "mip": ("mip_monthly", _mip),
+}
+
+
+def _run_one(command: str, c: Catchment, args: argparse.Namespace) -> AnyResult:
+    """Run one method; missing inputs come out as :class:`_MissingFlagsError`."""
+    try:
+        return _METHODS[command][1](c, args)
+    except MissingInputError as exc:
+        raise _MissingFlagsError(command, [FLAGS.get(f, f) for f in exc.missing]) from exc
+
+
+def _run(args: argparse.Namespace) -> tuple[dict[str, AnyResult], list[str]]:
+    """The results by section name, and the notes for methods ``all`` skipped.
+
+    A single command raises :class:`_MissingFlagsError` when its inputs are missing.
+    ``all`` runs every method whose inputs are given and notes the rest, so a
+    desk study works before any field measurement; it raises only if nothing
+    can run (``main`` reports an empty result as an error). Invalid inputs
+    raise ``ValueError`` in either case.
+    """
     c = _catchment(args)
-    if args.command == "flood":
-        return {"flood_peaks": wecs_dhm.flood_peaks(c, _periods(args))}
-    if args.command == "fdc":
-        return {"flow_duration": wecs_dhm.flow_duration(c)}
-    if args.command == "monthly":
-        return {"wecs_monthly": wecs_dhm.monthly_flows(c)}
-    if args.command == "mip":
-        return {"mip_monthly": _mip(c, args)}
-    wecs = wecs_dhm.monthly_flows(c)
-    hydro = _mip(c, args)
-    return {
-        "flood_peaks": wecs_dhm.flood_peaks(c, _periods(args)),
-        "flow_duration": wecs_dhm.flow_duration(c),
-        "wecs_monthly": wecs,
-        "mip_monthly": hydro,
-        "comparison": compare_monthly(wecs, hydro),
-    }
+    if args.command != "all":
+        return {_METHODS[args.command][0]: _run_one(args.command, c, args)}, []
+    results: dict[str, AnyResult] = {}
+    skipped: list[str] = []
+    for command, (section, _) in _METHODS.items():
+        try:
+            results[section] = _run_one(command, c, args)
+        except _MissingFlagsError as exc:
+            skipped.append(f"skipped {command}: needs {', '.join(exc.flags)}")
+    wecs, hydro = results.get("wecs_monthly"), results.get("mip_monthly")
+    if isinstance(wecs, MonthlyFlows) and isinstance(hydro, MonthlyFlows):
+        results["comparison"] = compare_monthly(wecs, hydro)
+    else:
+        skipped.append("skipped compare: needs the monthly and mip results")
+    return results, skipped
 
 
 # ------------------------------------------------------------------ rendering
@@ -235,10 +268,13 @@ def _render_table(name: str, result: AnyResult, d: int) -> list[str]:
     return lines
 
 
-def _render(results: dict[str, AnyResult], fmt: str, decimals: int | None) -> str:
+def _render(
+    results: dict[str, AnyResult], fmt: str, decimals: int | None, *, sections: bool
+) -> str:
+    """Render the results; ``sections`` (the ``all`` command) keys them by name."""
     if fmt == "json":
         data = {name: json.loads(r.to_json(decimals=decimals)) for name, r in results.items()}
-        payload: Any = next(iter(data.values())) if len(data) == 1 else data
+        payload: Any = data if sections else next(iter(data.values()))
         return json.dumps(payload, indent=2, ensure_ascii=True) + "\n"
     d = 2 if decimals is None else decimals
     if fmt == "csv":
@@ -246,18 +282,13 @@ def _render(results: dict[str, AnyResult], fmt: str, decimals: int | None) -> st
         for name, result in results.items():
             text = result.to_csv(decimals=d)
             assert text is not None
-            blocks.append(text if len(results) == 1 else f"# {name}\n{text}")
+            blocks.append(f"# {name}\n{text}" if sections else text)
         return "\n".join(blocks)
-    sections = ["\n".join(_render_table(name, r, d)) for name, r in results.items()]
-    return "\n\n".join(sections) + f"\n\n{DISCLAIMER}\n"
+    tables = ["\n".join(_render_table(name, r, d)) for name, r in results.items()]
+    return "\n\n".join(tables) + f"\n\n{DISCLAIMER}\n"
 
 
 # ----------------------------------------------------------------------- main
-
-
-def _missing_message(err: MissingInputError) -> str:
-    flags = ", ".join(FLAGS.get(f, f) for f in err.missing)
-    return f"{err} (set {flags})"
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -265,23 +296,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     out: TextIO = sys.stdout
     err: TextIO = sys.stderr
+
+    def note(kind: str, message: str) -> None:
+        print(ascii_text(f"{PROG}: {kind}: {message}"), file=err)
+
     try:
         with warnings.catch_warnings():
             # Results record their own warnings; print those once, cleanly, below.
             warnings.simplefilter("ignore")
-            results = _run(args)
-    except MissingInputError as exc:
-        print(ascii_text(f"{PROG}: error: {_missing_message(exc)}"), file=err)
+            results, skipped = _run(args)
+    except _MissingFlagsError as exc:
+        # A single command: name the library field too, when it was the library that noticed.
+        cause = exc.__cause__
+        note("error", f"{cause} (set {', '.join(exc.flags)})" if cause else str(exc))
         return 1
     except (ValueError, TypeError) as exc:
-        print(ascii_text(f"{PROG}: error: {exc}"), file=err)
+        note("error", str(exc))
         return 1
 
+    for message in skipped:
+        note("note", message)
+    if not results:
+        note("error", "nothing to run: give the inputs of at least one method")
+        return 1
     seen: dict[str, None] = {}
     for result in results.values():
         seen.update(dict.fromkeys(result.warnings))
     for message in seen:
-        print(ascii_text(f"{PROG}: warning: {message}"), file=err)
-    out.write(ascii_text(_render(results, args.format, args.decimals)))
+        note("warning", message)
+    out.write(
+        ascii_text(_render(results, args.format, args.decimals, sections=args.command == "all"))
+    )
     out.flush()
     return 0

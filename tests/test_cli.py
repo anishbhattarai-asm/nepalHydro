@@ -198,6 +198,82 @@ def test_table_warnings_also_go_to_stderr(capsys: pytest.CaptureFixture[str]) ->
     assert "region 4" in err
 
 
+# --------------------------------------------- `all` runs what it can
+
+
+def _notes(err: str) -> list[str]:
+    return [line for line in err.splitlines() if line.startswith("nepal-hydro: note: ")]
+
+
+def test_desk_study_without_a_measurement(
+    capsys: pytest.CaptureFixture[str], library: dict[str, Any]
+) -> None:
+    code, out, err = run(capsys, "all", *SOLU, "--format", "json")
+    assert code == 0
+    data = json.loads(out)
+    assert list(data) == ["flood_peaks", "flow_duration", "wecs_monthly"]
+    for name, value in data.items():
+        assert result_from_dict(value) == library[name]
+    assert _notes(err) == [
+        "nepal-hydro: note: skipped mip: needs --region, --q, --month",
+        "nepal-hydro: note: skipped compare: needs the monthly and mip results",
+    ]
+
+
+def test_only_floods(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out, err = run(capsys, "all", "--a3000", "97.7", "--format", "json")
+    assert code == 0
+    assert list(json.loads(out)) == ["flood_peaks"]  # still keyed by section
+    assert _notes(err) == [
+        "nepal-hydro: note: skipped fdc: needs --area, --a5000, --mwi",
+        "nepal-hydro: note: skipped monthly: needs --area, --a5000, --mwi",
+        "nepal-hydro: note: skipped mip: needs --region, --q, --month",
+        "nepal-hydro: note: skipped compare: needs the monthly and mip results",
+    ]
+
+
+def test_only_the_measurement(capsys: pytest.CaptureFixture[str]) -> None:
+    code, out, err = run(capsys, "all", *MEASUREMENT, "--format", "csv")
+    assert code == 0
+    assert [line for line in out.splitlines() if line.startswith("# ")] == ["# mip_monthly"]
+    assert "nepal-hydro: note: skipped flood: needs --a3000" in err
+    assert "error" not in err
+
+
+def test_skip_notes_list_only_what_is_missing(capsys: pytest.CaptureFixture[str]) -> None:
+    code, _, err = run(capsys, "all", "--a3000", "97.7", "--region", "3", "--q", "2.8")
+    assert code == 0
+    assert "nepal-hydro: note: skipped mip: needs --month" in _notes(err)
+
+
+@pytest.mark.parametrize("argv", [["all"], ["all", "--region", "3", "--q", "2.8"]])
+def test_all_with_nothing_to_run_exits_1(
+    capsys: pytest.CaptureFixture[str], argv: list[str]
+) -> None:
+    code, out, err = run(capsys, *argv)
+    assert code == 1
+    assert out == ""
+    assert err.splitlines()[-1] == (
+        "nepal-hydro: error: nothing to run: give the inputs of at least one method"
+    )
+    assert len(_notes(err)) == 5
+
+
+def test_all_still_rejects_invalid_input(capsys: pytest.CaptureFixture[str]) -> None:
+    # A skipped method is about missing inputs; a bad value is still an error.
+    code, out, err = run(capsys, "all", "--a3000", "97.7", "--region", "9", "--q", "1",
+                         "--month", "4")  # fmt: skip
+    assert (code, out) == (1, "")
+    assert "mip_region must be 1 to 7" in err
+
+
+def test_notes_come_before_warnings(capsys: pytest.CaptureFixture[str]) -> None:
+    _, out, err = run(capsys, "all", "--a3000", "60000", "--format", "json")
+    kinds = [line.split(":")[1].strip() for line in err.splitlines()]
+    assert kinds == ["note"] * 4 + ["warning"]
+    json.loads(out)
+
+
 # ------------------------------------------------------------ exit codes
 
 
@@ -207,8 +283,8 @@ def test_table_warnings_also_go_to_stderr(capsys: pytest.CaptureFixture[str]) ->
         (["mip", "--region", "9", "--q", "2.8", "--month", "4"], "mip_region must be 1 to 7"),
         (["mip", "--region", "3", "--q", "-1", "--month", "4"], "measured_q_m3s"),
         (["mip", "--region", "3", "--q", "1", "--month", "2", "--day", "30"], "invalid date"),
-        (["mip", "--region", "3", "--month", "4"], "needs --q"),
-        (["mip", "--q", "1", "--month", "4"], "mip_region (set --region)"),
+        (["mip", "--region", "3", "--month", "4"], "mip needs --q"),
+        (["mip", "--q", "1"], "mip needs --region, --month"),
         (["flood", "--area", "330"], "area_below_3000_km2 (set --a3000)"),
         (["fdc", "--area", "330"],
          "area_below_5000_km2, monsoon_wetness_index_mm (set --a5000, --mwi)"),
