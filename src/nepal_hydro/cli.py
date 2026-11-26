@@ -123,7 +123,9 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("monthly", parents=common, help="WECS/DHM mean monthly flows")
     sub.add_parser("mip", parents=[measurement, output], help="MIP mean monthly hydrograph")
     sub.add_parser(
-        "all", parents=[*common, measurement, floods], help="everything, plus WECS vs MIP"
+        "all",
+        parents=[*common, measurement, floods],
+        help="every method whose inputs are given, plus WECS vs MIP",
     )
     return parser
 
