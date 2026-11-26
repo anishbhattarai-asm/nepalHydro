@@ -22,7 +22,15 @@ from typing import IO, Any, ClassVar, TypeVar
 
 from nepal_hydro.coefficients import MONTHS
 
-__all__ = ["FloodEstimate", "FloodPeaks", "FlowDurationCurve", "MonthlyFlows", "result_from_dict"]
+__all__ = [
+    "ComparisonRow",
+    "FloodEstimate",
+    "FloodPeaks",
+    "FlowDurationCurve",
+    "MonthlyComparison",
+    "MonthlyFlows",
+    "result_from_dict",
+]
 
 _R = TypeVar("_R", bound="_Result")
 
@@ -64,7 +72,7 @@ class _Result:
     warnings: tuple[str, ...] = ()
 
     _kind: ClassVar[str]
-    _csv_header: ClassVar[tuple[str, str]]
+    _csv_header: ClassVar[tuple[str, ...]]
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "warnings", tuple(self.warnings))
@@ -75,7 +83,7 @@ class _Result:
             raise TypeError("warnings must be strings")
 
     # Subclasses supply their data rows and the extra dict fields.
-    def _rows(self) -> list[tuple[Any, float]]:  # pragma: no cover - abstract
+    def _rows(self) -> list[tuple[Any, ...]]:  # pragma: no cover - abstract
         raise NotImplementedError
 
     def _data(self) -> dict[str, Any]:  # pragma: no cover - abstract
@@ -123,7 +131,7 @@ class _Result:
         With no target, return the CSV text instead. Full precision unless
         ``decimals`` is given.
         """
-        rows = [(key, _rounded(value, decimals)) for key, value in self._rows()]
+        rows = [tuple(_rounded(v, decimals) for v in row) for row in self._rows()]
         if path_or_buffer is None:
             buffer = io.StringIO()
             self._write_csv(buffer, rows)
@@ -135,7 +143,7 @@ class _Result:
             self._write_csv(path_or_buffer, rows)
         return None
 
-    def _write_csv(self, fh: IO[str], rows: Iterable[tuple[Any, Any]]) -> None:
+    def _write_csv(self, fh: IO[str], rows: Iterable[tuple[Any, ...]]) -> None:
         writer = csv.writer(fh, lineterminator="\n")
         writer.writerow(self._csv_header)
         writer.writerows(rows)
@@ -191,7 +199,7 @@ class FloodPeaks(_Result, Mapping[float, FloodEstimate]):
     sigma_ln: float
 
     _kind: ClassVar[str] = "FloodPeaks"
-    _csv_header: ClassVar[tuple[str, str]] = ("return_period_yr", "q_m3s")
+    _csv_header: ClassVar[tuple[str, ...]] = ("return_period_yr", "q_m3s")
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -213,7 +221,7 @@ class FloodPeaks(_Result, Mapping[float, FloodEstimate]):
     def __len__(self) -> int:
         return len(self.estimates)
 
-    def _rows(self) -> list[tuple[Any, float]]:
+    def _rows(self) -> list[tuple[Any, ...]]:
         return [(e.return_period_yr, e.q_m3s) for e in self.estimates.values()]
 
     def _data(self) -> dict[str, Any]:
@@ -248,7 +256,7 @@ class FlowDurationCurve(_Result):
     points: Mapping[int, float]
 
     _kind: ClassVar[str] = "FlowDurationCurve"
-    _csv_header: ClassVar[tuple[str, str]] = ("exceedance_pct", "q_m3s")
+    _csv_header: ClassVar[tuple[str, ...]] = ("exceedance_pct", "q_m3s")
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -292,7 +300,7 @@ class FlowDurationCurve(_Result):
             return math.exp(math.log(q_lo) + frac * (math.log(q_hi) - math.log(q_lo)))
         return q_lo + frac * (q_hi - q_lo)
 
-    def _rows(self) -> list[tuple[Any, float]]:
+    def _rows(self) -> list[tuple[Any, ...]]:
         return list(self.points.items())
 
     def _data(self) -> dict[str, Any]:
@@ -321,7 +329,7 @@ class MonthlyFlows(_Result, Mapping[str, float]):
     by_month: Mapping[str, float]
 
     _kind: ClassVar[str] = "MonthlyFlows"
-    _csv_header: ClassVar[tuple[str, str]] = ("month", "q_m3s")
+    _csv_header: ClassVar[tuple[str, ...]] = ("month", "q_m3s")
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -351,7 +359,7 @@ class MonthlyFlows(_Result, Mapping[str, float]):
         """The 12 flows, January first."""
         return list(self.by_month.values())
 
-    def _rows(self) -> list[tuple[Any, float]]:
+    def _rows(self) -> list[tuple[Any, ...]]:
         return list(self.by_month.items())
 
     def _data(self) -> dict[str, Any]:
@@ -366,16 +374,105 @@ class MonthlyFlows(_Result, Mapping[str, float]):
         return f"MonthlyFlows({vals}, mean={self.annual_mean:.2f} m³/s, {self._repr_tail()})"
 
 
+# ----------------------------------------------------------------- comparison
+
+
+@dataclass(frozen=True)
+class ComparisonRow:
+    """One row of a WECS vs MIP comparison. ``ratio`` is ``mip / wecs`` (None if wecs is 0)."""
+
+    month: str
+    wecs_m3s: float
+    mip_m3s: float
+    ratio: float | None
+
+    @classmethod
+    def of(cls, month: str, wecs_m3s: float, mip_m3s: float) -> ComparisonRow:
+        return cls(month, wecs_m3s, mip_m3s, mip_m3s / wecs_m3s if wecs_m3s > 0 else None)
+
+    def __repr__(self) -> str:
+        ratio = "n/a" if self.ratio is None else f"{self.ratio:.2f}"
+        return (
+            f"ComparisonRow({self.month}: wecs={self.wecs_m3s:.2f}, "
+            f"mip={self.mip_m3s:.2f} m³/s, ratio={ratio})"
+        )
+
+
+@dataclass(frozen=True, kw_only=True, repr=False)
+class MonthlyComparison(_Result, Mapping[str, ComparisonRow]):
+    """WECS/DHM and MIP monthly flows side by side: ``comparison["Jul"].ratio``.
+
+    A mapping from month name to :class:`ComparisonRow`; :attr:`annual` compares
+    the annual means. ``ratio`` is MIP over WECS. Built by
+    :func:`nepal_hydro.compare_monthly`.
+    """
+
+    wecs: MonthlyFlows
+    mip: MonthlyFlows
+
+    _kind: ClassVar[str] = "MonthlyComparison"
+    _csv_header: ClassVar[tuple[str, ...]] = ("month", "wecs_m3s", "mip_m3s", "ratio")
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        for name in ("wecs", "mip"):
+            if not isinstance(getattr(self, name), MonthlyFlows):
+                raise TypeError(f"{name} must be a MonthlyFlows result")
+
+    def __getitem__(self, month: str) -> ComparisonRow:
+        return ComparisonRow.of(month, self.wecs[month], self.mip[month])
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(MONTHS)
+
+    def __len__(self) -> int:
+        return len(MONTHS)
+
+    @property
+    def annual(self) -> ComparisonRow:
+        """The annual means compared, as a row labelled ``"annual"``."""
+        return ComparisonRow.of("annual", self.wecs.annual_mean, self.mip.annual_mean)
+
+    def _rows(self) -> list[tuple[Any, ...]]:
+        rows = [*self.values(), self.annual]
+        return [(r.month, r.wecs_m3s, r.mip_m3s, r.ratio) for r in rows]
+
+    def _data(self) -> dict[str, Any]:
+        return {
+            "rows": [dict(zip(self._csv_header, row, strict=True)) for row in self._rows()],
+            "wecs": self.wecs.to_dict(),
+            "mip": self.mip.to_dict(),
+        }
+
+    @classmethod
+    def _from_data(cls, data: Mapping[str, Any], meta: dict[str, Any]) -> MonthlyComparison:
+        return cls(
+            wecs=MonthlyFlows.from_dict(data["wecs"]),
+            mip=MonthlyFlows.from_dict(data["mip"]),
+            **meta,
+        )
+
+    def __repr__(self) -> str:
+        a = self.annual
+        ratio = "n/a" if a.ratio is None else f"{a.ratio:.2f}"
+        return (
+            f"MonthlyComparison(annual mean wecs={a.wecs_m3s:.2f}, mip={a.mip_m3s:.2f} m³/s, "
+            f"ratio={ratio}, {self._repr_tail()})"
+        )
+
+
+AnyResult = FloodPeaks | FlowDurationCurve | MonthlyFlows | MonthlyComparison
+
 _TYPES: dict[str, type[_Result]] = {
-    cls._kind: cls for cls in (FloodPeaks, FlowDurationCurve, MonthlyFlows)
+    cls._kind: cls for cls in (FloodPeaks, FlowDurationCurve, MonthlyFlows, MonthlyComparison)
 }
 
 
-def result_from_dict(data: Mapping[str, Any]) -> FloodPeaks | FlowDurationCurve | MonthlyFlows:
+def result_from_dict(data: Mapping[str, Any]) -> AnyResult:
     """Rebuild any result from its :meth:`to_dict` output, using its ``type`` field."""
     kind = data.get("type")
     if kind not in _TYPES:
         raise ValueError(f"unknown result type {kind!r}")
     result = _TYPES[kind].from_dict(data)
-    assert isinstance(result, (FloodPeaks, FlowDurationCurve, MonthlyFlows))
+    assert isinstance(result, (FloodPeaks, FlowDurationCurve, MonthlyFlows, MonthlyComparison))
     return result
